@@ -7,6 +7,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
+#include "Car.h"
 #include "json.hpp"
 
 // for convenience
@@ -68,10 +69,12 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
 int main() {
   uWS::Hub h;
 
+  Car myCar;
+
   // MPC is initialized here!
   MPC mpc;
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&myCar, &mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -85,12 +88,37 @@ int main() {
         string event = j[0].get<string>();
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          vector<double> ptsx = j[1]["ptsx"];
-          vector<double> ptsy = j[1]["ptsy"];
-          double px = j[1]["x"];
-          double py = j[1]["y"];
-          double psi = j[1]["psi"];
-          double v = j[1]["speed"];
+          vector<double> ptsx = j[1]["ptsx"]; // [m] +east
+          vector<double> ptsy = j[1]["ptsy"]; // [m] +north
+          double px = j[1]["x"]; // [m] +east
+          double py = j[1]["y"]; // [m] +north
+          double psi = j[1]["psi"]; // [rad] +CCW from east
+          double v = j[1]["speed"]; // [mph]
+          double steer_fb = j[1]["steering_angle"]; // [rad]
+
+          // Update the Car's state
+          Car::Coord loc;
+          loc.x = px;
+          loc.y = py;
+          myCar.set_location(loc);
+          myCar.set_psi(psi);
+
+          //For display of the waypoints/reference line
+          vector<double> next_x_vals;
+          vector<double> next_y_vals;
+
+          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
+          // the points in the simulator are connected by a Yellow line
+
+          // convert the points from map coordinates to vehicle body coordinates
+          for (size_t i=0; i<ptsx.size(); i++) {
+            Car::Coord map_coord;
+            map_coord.x = ptsx[i];
+            map_coord.y = ptsy[i];
+            Car::Coord body_coord = myCar.map2body(map_coord);
+            next_x_vals.push_back(body_coord.x);
+            next_y_vals.push_back(body_coord.y);
+          }
 
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -98,8 +126,8 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          double steer_value = steer_fb;
+          double throttle_value = 0.3;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -118,12 +146,6 @@ int main() {
           msgJson["mpc_y"] = mpc_y_vals;
 
           //Display the waypoints/reference line
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
-
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Yellow line
-
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
