@@ -5,66 +5,35 @@
 #include <thread>
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
-#include "Eigen-3.3/Eigen/QR"
+//#include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
 #include "Car.h"
+#include "UtilFunctions.h"
 #include "json.hpp"
 
 // for convenience
 using json = nlohmann::json;
 
-// For converting back and forth between radians and degrees.
-constexpr double pi() { return M_PI; }
-double deg2rad(double x) { return x * pi() / 180; }
-double rad2deg(double x) { return x * 180 / pi(); }
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
-string hasData(string s) {
+std::string hasData(std::string s) {
   auto found_null = s.find("null");
   auto b1 = s.find_first_of("[");
   auto b2 = s.rfind("}]");
-  if (found_null != string::npos) {
+  if (found_null != std::string::npos) {
     return "";
-  } else if (b1 != string::npos && b2 != string::npos) {
+  } else if (b1 != std::string::npos && b2 != std::string::npos) {
     return s.substr(b1, b2 - b1 + 2);
   }
   return "";
 }
 
-// Evaluate a polynomial.
-double polyeval(Eigen::VectorXd coeffs, double x) {
-  double result = 0.0;
-  for (int i = 0; i < coeffs.size(); i++) {
-    result += coeffs[i] * pow(x, i);
-  }
-  return result;
-}
-
-// Fit a polynomial.
-// Adapted from
-// https://github.com/JuliaMath/Polynomials.jl/blob/master/src/Polynomials.jl#L676-L716
-Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
-                        int order) {
-  assert(xvals.size() == yvals.size());
-  assert(order >= 1 && order <= xvals.size() - 1);
-  Eigen::MatrixXd A(xvals.size(), order + 1);
-
-  for (int i = 0; i < xvals.size(); i++) {
-    A(i, 0) = 1.0;
-  }
-
-  for (int j = 0; j < xvals.size(); j++) {
-    for (int i = 0; i < order; i++) {
-      A(j, i + 1) = A(j, i) * xvals(j);
-    }
-  }
-
-  auto Q = A.householderQr();
-  auto result = Q.solve(yvals);
-  return result;
-}
+/*
+ * Move polynomial functions to "UtilFunctions.h",
+ * so that other classes could use them as well
+ */
 
 int main() {
   uWS::Hub h;
@@ -72,72 +41,72 @@ int main() {
   Car myCar;
 
   // MPC is initialized here!
-  MPC mpc;
+//  MPC mpc;
 
-  h.onMessage([&myCar, &mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&myCar](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
-    string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+    std::string sdata = std::string(data).substr(0, length);
+    std::cout << sdata << std::endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
-      string s = hasData(sdata);
+      std::string s = hasData(sdata);
       if (s != "") {
         auto j = json::parse(s);
-        string event = j[0].get<string>();
+        std::string event = j[0].get<std::string>();
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          vector<double> ptsx = j[1]["ptsx"]; // [m] +east
-          vector<double> ptsy = j[1]["ptsy"]; // [m] +north
+          std::vector<double> ptsx = j[1]["ptsx"]; // [m] +east
+          std::vector<double> ptsy = j[1]["ptsy"]; // [m] +north
           double px = j[1]["x"]; // [m] +east
           double py = j[1]["y"]; // [m] +north
           double psi = j[1]["psi"]; // [rad] +CCW from east
           double v = j[1]["speed"]; // [mph]
           double steer_fb = j[1]["steering_angle"]; // [rad]
 
-          // Update the Car's state
+          // Update the Car states
           Car::Coord loc;
-          loc.x = px;
-          loc.y = py;
+            loc.x = px;
+            loc.y = py;
           myCar.set_location(loc);
           myCar.set_psi(psi);
+          myCar.set_v(v);
 
-          //For display of the waypoints/reference line
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
+          // convert waypoints (WPT) from map to vehicle body coordinates
+          Eigen::VectorXd wptx_body(ptsx.size()); // [m] +fwd
+          Eigen::VectorXd wpty_body(ptsy.size()); // [m] +left
 
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Yellow line
-
-          // convert the points from map coordinates to vehicle body coordinates
           for (size_t i=0; i<ptsx.size(); i++) {
             Car::Coord map_coord;
-            map_coord.x = ptsx[i];
-            map_coord.y = ptsy[i];
+              map_coord.x = ptsx[i];
+              map_coord.y = ptsy[i];
             Car::Coord body_coord = myCar.map2body(map_coord);
-            next_x_vals.push_back(body_coord.x);
-            next_y_vals.push_back(body_coord.y);
+            wptx_body(i) = body_coord.x;
+            wpty_body(i) = body_coord.y;
           }
 
-          /*
-          * TODO: Calculate steering angle and throttle using MPC.
-          *
-          * Both are in between [-1, 1].
-          *
-          */
-          double steer_value = steer_fb;
-          double throttle_value = 0.3;
+          // Find coeffs of 2nd-order polynomial curve fit
+          Eigen::VectorXd coeffs = polyfit(wptx_body, wpty_body, 2);
+          myCar.setCoeffs(coeffs);
+
+          myCar.update();
+
+          double steer_value = myCar.get_steerCmd();  // [rad], (+) right turn
+          double throttle_value = myCar.get_accelCmd(); // (-1,1)
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value;
+          msgJson["steering_angle"] = steer_value/deg2rad(25);
           msgJson["throttle"] = throttle_value;
 
           //Display the MPC predicted trajectory 
-          vector<double> mpc_x_vals;
-          vector<double> mpc_y_vals;
+          std::vector<double> mpc_x_vals;
+          std::vector<double> mpc_y_vals;
+
+//          myCar.test_polyder(mpc_x_vals, mpc_y_vals); // for verification testing only
+          myCar.predTraj(mpc_x_vals, mpc_y_vals);
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
@@ -145,7 +114,16 @@ int main() {
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
-          //Display the waypoints/reference line
+          //For display of the waypoints/reference line
+          std::vector<double> next_x_vals;
+          std::vector<double> next_y_vals;
+
+          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
+          // the points in the simulator are connected by a Yellow line
+
+          next_x_vals.assign(wptx_body.data(), wptx_body.data()+wptx_body.size());
+          next_y_vals.assign(wpty_body.data(), wpty_body.data()+wpty_body.size());
+
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
@@ -161,7 +139,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(100));
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
