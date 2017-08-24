@@ -50,7 +50,7 @@ inline double polyeval(Eigen::VectorXd coeffs, double x) // std:: version
   return result;
 }
 
-// Derivative of a polynomial (overloaded)
+// Derivative of a polynomial
 inline Eigen::VectorXd polyder(Eigen::VectorXd p)
 {
   Eigen::VectorXd k(p.size()-1);

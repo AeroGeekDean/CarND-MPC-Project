@@ -74,8 +74,8 @@ class FG_eval {
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
-      fg[0] += CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2) * 100.0;
-      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2)*100.0;
+      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2)*100.0;
     }
 
     //
@@ -118,7 +118,7 @@ class FG_eval {
 //      AD<double> psi_desired = CppAD::atan(coeffs[1]);
 
       AD<double> y1_desired = polyeval(coeffs, x1);
-      AD<double> psi_desired = CppAD::atan(polyeval(polyder(coeffs), x1));
+      AD<double> psi_desired = -CppAD::atan(polyeval(polyder(coeffs), x1)); // note: (-1) sign. +slope = -psi !!
 
       // Here's `x` to get you started.
       // The idea here is to constraint this value to be 0.
@@ -128,9 +128,16 @@ class FG_eval {
       // these to the solver.
 
       // TODO: Setup the rest of the model constraints
+      // NOTE - *** This is in vehicle body axis!!! ***
+      // (+) x      = fwd
+      // (+) y      = left
+      // (+) psi    = right of nose
+      // (+) delta  = right turn
+      // (+) cte    = car is right of Ref Trajectory
+      // (+) epsi   = nose needs to turn right
       fg[1 + x_start + t]     = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
-      fg[1 + y_start + t]     = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
-      fg[1 + psi_start + t]   = psi1 - (psi0 - v0/Lf*delta0*dt);
+      fg[1 + y_start + t]     = y1 - (y0 - v0 * CppAD::sin(psi0) * dt);
+      fg[1 + psi_start + t]   = psi1 - (psi0 + v0/Lf*delta0*dt);
       fg[1 + v_start + t]     = v1 - (v0 + a0*dt);
 
       // Udacity solution. propagating errors from prev timestep. WHY?!?

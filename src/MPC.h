@@ -14,12 +14,12 @@ class MPC {
   virtual ~MPC();
 
   void init();
-  void updata_state(Eigen::VectorXd& ic_state) { this->x0 = ic_state; }
-  void update_coeff(Eigen::VectorXd& coeffs) { fg.set_coeff(coeffs); }
+  void set_state(Eigen::VectorXd& ic_state) { this->x0 = ic_state; }
+  void set_coeff(Eigen::VectorXd& coeffs) { fg.set_coeff(coeffs); }
 
-  // Solve the model and return the projected states and current actuation
+  // Solve the model and return the current actuations (steering and accel)
   // Assumes initial state and polynomial coefficients has already been given.
-  std::vector<double> Solve();
+  void Solve(double& steer_cmd_out, double& accel_cmd_out);
 
   const std::vector<double>& getPredTrajX() const { return pred_traj_x; }
   const std::vector<double>& getPredTrajY() const { return pred_traj_y; }

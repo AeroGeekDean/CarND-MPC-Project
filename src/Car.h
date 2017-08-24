@@ -23,9 +23,11 @@ class Car {
   Car();
   virtual ~Car();
 
+  void calc_nav_errs();
+
   void update();
 
-  void predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out);
+  void get_predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out);
   void test_polyder(std::vector<double>& xs_out, std::vector<double>& ys_out);
 
   // convert from map to body coordinates
@@ -46,8 +48,6 @@ class Car {
   void setCoeffs(const Eigen::VectorXd& coeffs) {this->coeffs = coeffs;}
 
  private:
-
-  void calc_nav_errs();
 
   MPC myMpc;  // ModelPredictiveController
 

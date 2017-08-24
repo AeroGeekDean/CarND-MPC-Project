@@ -11,6 +11,7 @@
 #include "UtilFunctions.h"
 
 Car::Car() {
+  myMpc.init();
 }
 
 Car::~Car() {
@@ -27,19 +28,22 @@ Car::Coord Car::map2body(Car::Coord& in_map) {
 
 void Car::update() {
 
-  calc_nav_errs();
-
   // update MPC with current vehicle states
   Eigen::VectorXd state(6);
-  state << myPos.x, myPos.y, myPsi, myV, myCte, myPsiErr;
-  myMpc.updata_state(state);
 
-  myMpc.update_coeff(coeffs);
+  // Note - since we're doing everything in vehicle axis
+  // x, y, and psi are ALL 0.0 since the car is at the origin
+  state << 0.0,     // x pos, [m]
+           0.0,     // y pos, [m]
+           0.0,     // psi, [rad]
+           myV,     // speed, [mph]
+           myCte,   // [m], + to left of RefTraj
+           myPsiErr;// psi_err, [rad] + to left of ref Psi
+  myMpc.set_state(state);
 
-  auto outputs = myMpc.Solve();
+  myMpc.set_coeff(coeffs);
 
-  mySteerCmd = outputs[0];
-  myAccelCmd = outputs[1];
+  myMpc.Solve(mySteerCmd, myAccelCmd);
 
 }
 
@@ -53,12 +57,16 @@ void Car::calc_nav_errs() {
 
   // calculate the orientation error
   coeffs_der = polyder(coeffs); // 1st derivative coeff
-  double refPsi_body = atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
-  refPsi = wrapAngle(myPsi - refPsi_body);  // convert from body to map axis
-  myPsiErr = wrapAngle((refPsi - myPsi), M_PI); // for control system, use +/-pi
+
+  myPsiErr = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
+  refPsi = wrapAngle(myPsi - myPsiErr);  // convert from body to map axis
+
+//  double refPsi_body = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
+//  refPsi = wrapAngle(myPsi - refPsi_body);  // convert from body to map axis
+//  myPsiErr = wrapAngle((refPsi - myPsi), M_PI); // for control system, use +/-pi
 }
 
-void Car::predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out) {
+void Car::get_predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out) {
   xs_out = myMpc.getPredTrajX();
   ys_out = myMpc.getPredTrajY();
 }
@@ -75,12 +83,12 @@ void Car::test_polyder(std::vector<double>& xs_out, std::vector<double>& ys_out)
   double ahead_slope = polyeval(coeffs_der, ahead_x);
 
   // draw 3 dots (tangent to Ref Traj at ahead_x distance)
-  xs_out.push_back(ahead_x-seg_len);
-  ys_out.push_back( ahead_y - ahead_slope * (ahead_x-seg_len) );
+  xs_out.push_back(ahead_x - seg_len);
+  ys_out.push_back(ahead_y - ahead_slope*seg_len);
 
   xs_out.push_back(ahead_x);
   ys_out.push_back(ahead_y);
 
-  xs_out.push_back(ahead_x+seg_len);
-  ys_out.push_back( ahead_y + ahead_slope * (ahead_x+seg_len) );
+  xs_out.push_back(ahead_x + seg_len);
+  ys_out.push_back(ahead_y + ahead_slope*seg_len);
 }

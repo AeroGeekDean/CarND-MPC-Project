@@ -19,16 +19,21 @@ double dt = 0;
 // presented in the classroom matched the previous radius.
 //
 // This is the length from front to CoG that has a similar radius.
-const double Lf = 2.67;
+//const double Lf = 2.67;
 
 //
 // MPC class definition implementation.
 //
-MPC::MPC() {}
+MPC::MPC() {
+  look_ahead_time = 5.0; // [sec]
+  dt = 0.1; // 10 Hz [sec]
+  N = (int) look_ahead_time/dt;
+}
+
 MPC::~MPC() {}
 
 void MPC::init() {
-  look_ahead_time = 5.0; // [sec]
+  look_ahead_time = 3.0; // [sec]
   dt = 0.1; // 10 Hz [sec]
   N = (int) look_ahead_time/dt;
 
@@ -40,7 +45,7 @@ void MPC::init() {
   fg.dt = dt;
   fg.N = N;
 
-  fg.vref = 40; // set reference speed, [mph]
+  fg.vref = 15; // set reference speed, [mph]
 
   // The solver takes all the state variables and actuator
   // variables in a singular vector. Thus, we need to establish
@@ -57,7 +62,7 @@ void MPC::init() {
 
 }
 
-std::vector<double> MPC::Solve() {
+void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
   // setup parameters
@@ -81,6 +86,8 @@ std::vector<double> MPC::Solve() {
   // Set the number of constraints
   size_t n_constraints = num_states * N;
 
+//  std::cout << "n_vars = " << n_vars << " n_constraints = " << n_constraints << std::endl;
+
   // Initial value of the independent variables.
   // SHOULD BE 0 besides initial state.
   Dvector vars(n_vars);
@@ -100,7 +107,7 @@ std::vector<double> MPC::Solve() {
   // to the max negative and positive values.
   for (int i = 0; i < fg.delta_start; i++) {
     vars_lowerbound[i] = -1.0e19;
-    vars_upperbound[i] = 1.0e19;
+    vars_upperbound[i] =  1.0e19;
   }
   // The upper and lower limits of delta (steering) are
   // (-25, 25) [deg] (apply values in [rad]).
@@ -110,11 +117,11 @@ std::vector<double> MPC::Solve() {
     vars_upperbound[i] =  0.436332; //  25*pi/180
   }
   // Acceleration upper and lower limits.
-  // units??
+  // [mph/sec]
   // NOTE: Feel free to change this to something else.
   for (int i = fg.a_start; i < n_vars; i++) {
-    vars_lowerbound[i] = -10.0;
-    vars_upperbound[i] = 10.0;
+    vars_lowerbound[i] = -1.0;
+    vars_upperbound[i] = 1.0;
   }
 
   // Lower and upper limits for the constraints
@@ -139,8 +146,8 @@ std::vector<double> MPC::Solve() {
   constraints_upperbound[fg.cte_start]   = cte;
   constraints_upperbound[fg.epsi_start]  = epsi;
 
-//  // object that computes objective and constraints
-//  FG_eval fg_eval(coeffs);
+  //  // object that computes objective and constraints
+//    FG_eval fg_eval(coeffs); // it's now a private member of MPC class
 
   //
   // NOTE: You don't have to worry about these options
@@ -174,7 +181,6 @@ std::vector<double> MPC::Solve() {
 
   // Cost
   auto cost = solution.obj_value;
-  std::cout << "Cost " << cost << std::endl;
 
   // Save off predicted trajectory for MPC plotting
   pred_traj_x.clear();
@@ -190,5 +196,17 @@ std::vector<double> MPC::Solve() {
   //
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
-  return {solution.x[fg.delta_start], solution.x[fg.a_start]};
+
+  steer_cmd_out = solution.x[fg.delta_start];
+  accel_cmd_out = solution.x[fg.a_start];
+
+  std::cout << (ok ? "OK " : "FAIL ")
+            << ", Cost " << cost
+            << ", Steer " << steer_cmd_out
+            << ", Accel " << accel_cmd_out
+            << ", cte " << cte
+            << ", epsi " << rad2deg(epsi)
+            << std::endl;
+
+  return;
 }

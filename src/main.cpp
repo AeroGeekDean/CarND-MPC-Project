@@ -6,7 +6,7 @@
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
 //#include "Eigen-3.3/Eigen/QR"
-#include "MPC.h"
+//#include "MPC.h"
 #include "Car.h"
 #include "UtilFunctions.h"
 #include "json.hpp"
@@ -63,7 +63,7 @@ int main() {
           double py = j[1]["y"]; // [m] +north
           double psi = j[1]["psi"]; // [rad] +CCW from east
           double v = j[1]["speed"]; // [mph]
-          double steer_fb = j[1]["steering_angle"]; // [rad]
+//          double steer_fb = j[1]["steering_angle"]; // [rad]
 
           // Update the Car states
           Car::Coord loc;
@@ -76,7 +76,6 @@ int main() {
           // convert waypoints (WPT) from map to vehicle body coordinates
           Eigen::VectorXd wptx_body(ptsx.size()); // [m] +fwd
           Eigen::VectorXd wpty_body(ptsy.size()); // [m] +left
-
           for (size_t i=0; i<ptsx.size(); i++) {
             Car::Coord map_coord;
               map_coord.x = ptsx[i];
@@ -85,15 +84,18 @@ int main() {
             wptx_body(i) = body_coord.x;
             wpty_body(i) = body_coord.y;
           }
-
           // Find coeffs of 2nd-order polynomial curve fit
           Eigen::VectorXd coeffs = polyfit(wptx_body, wpty_body, 2);
           myCar.setCoeffs(coeffs);
 
+          myCar.calc_nav_errs();
           myCar.update();
 
           double steer_value = myCar.get_steerCmd();  // [rad], (+) right turn
           double throttle_value = myCar.get_accelCmd(); // (-1,1)
+//          double steer_value = 0.0;  // [rad], (+) right turn
+//          double throttle_value = 0.0; // (-1,1)
+
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -105,8 +107,8 @@ int main() {
           std::vector<double> mpc_x_vals;
           std::vector<double> mpc_y_vals;
 
-//          myCar.test_polyder(mpc_x_vals, mpc_y_vals); // for verification testing only
-          myCar.predTraj(mpc_x_vals, mpc_y_vals);
+//          myCar.test_polyder(mpc_x_vals, mpc_y_vals); // for verification testing only. draws tangent line
+          myCar.get_predTraj(mpc_x_vals, mpc_y_vals);
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
@@ -127,9 +129,8 @@ int main() {
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
-
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+//          std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
