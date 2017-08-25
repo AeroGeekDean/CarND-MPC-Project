@@ -27,6 +27,9 @@ class Car {
 
   void update();
 
+  double get_steerCmd() const              { return mySteerCmd; }
+  double get_accelCmd() const              { return myAccelCmd; }
+
   void get_predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out);
   void test_polyder(std::vector<double>& xs_out, std::vector<double>& ys_out);
 
@@ -38,8 +41,6 @@ class Car {
   const double get_psi() const              {return myPsi;}
   const double get_v() const                {return myV;}
   const Eigen::VectorXd& getCoeffs() const  {return coeffs;}
-  double get_steerCmd() const              { return mySteerCmd; }
-  double get_accelCmd() const              { return myAccelCmd; }
 
   // Mutator methods
   void set_location(Car::Coord& loc_in)         {this->myPos = loc_in;}
@@ -53,8 +54,8 @@ class Car {
 
   // car's own state (in map coordinate system)
   Coord myPos;            // [m], (+) east/north
-  double myPsi;           // [rad], (+) CCW from east
-  double myV;             // [mph], (+) forward
+  double myPsi;           // [rad], map axis, (+) CCW from east
+  double myV;             // [m/s], (+) forward
   double myCte;           // [m], (+) car is LEFT of Ref Traj
   double myPsiErr;        // [rad], (+) car pointing LEFT of Ref heading
 
@@ -63,7 +64,7 @@ class Car {
 
   Eigen::VectorXd coeffs; // Ref trajectory polyfitted coeffs, in body axis
   Eigen::VectorXd coeffs_der; // coeff of Ref Traj's 1st derivative (ie: slope)
-  double refPsi;          // Ref heading
+  double refPsi_map;      // Ref heading in map axis
 };
 
 #endif /* CAR_H_ */

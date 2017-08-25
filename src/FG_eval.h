@@ -25,7 +25,7 @@ class FG_eval {
 
   size_t N; // num of frames
   double dt; // time step, [sec]
-  double vref; // reference speed, [mph]
+  double vref; // reference speed, [m/s]
   // This is the length from front to CoG that has a similar radius.
   const double Lf = 2.67;
 
@@ -62,20 +62,20 @@ class FG_eval {
     // The part of the cost based on the reference state.
     for (int t = 0; t < N; t++) {
       fg[0] += CppAD::pow(vars[cte_start + t], 2);
-      fg[0] += CppAD::pow(vars[epsi_start + t], 2);
+      fg[0] += CppAD::pow(vars[epsi_start + t], 2)*10;
       fg[0] += CppAD::pow(vars[v_start + t] - vref, 2);
     }
 
     // Minimize the use of actuators.
-    for (int t = 0; t < N - 1; t++) {
-      fg[0] += CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t], 2);
-    }
+//    for (int t = 0; t < N - 1; t++) {
+//      fg[0] += CppAD::pow(vars[delta_start + t], 2)*0.01;
+//      fg[0] += CppAD::pow(vars[a_start + t], 2); // don't penalize accel/throttle amplitude
+//    }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
-      fg[0] += CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2)*100.0;
-      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2)*100.0;
+      fg[0] += CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2) *10;
+      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
     //
@@ -114,9 +114,6 @@ class FG_eval {
       AD<double> cte1   = vars[cte_start + t];
       AD<double> epsi1  = vars[epsi_start + t];
 
-//      AD<double> y1_desired = coeffs[0] + coeffs[1] * x1;
-//      AD<double> psi_desired = CppAD::atan(coeffs[1]);
-
       AD<double> y1_desired = polyeval(coeffs, x1);
       AD<double> psi_desired = -CppAD::atan(polyeval(polyder(coeffs), x1)); // note: (-1) sign. +slope = -psi !!
 
@@ -132,12 +129,13 @@ class FG_eval {
       // (+) x      = fwd
       // (+) y      = left
       // (+) psi    = right of nose
+      // (+) v      = fwd
       // (+) delta  = right turn
       // (+) cte    = car is right of Ref Trajectory
       // (+) epsi   = nose needs to turn right
       fg[1 + x_start + t]     = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[1 + y_start + t]     = y1 - (y0 - v0 * CppAD::sin(psi0) * dt);
-      fg[1 + psi_start + t]   = psi1 - (psi0 + v0/Lf*delta0*dt);
+      fg[1 + psi_start + t]   = psi1 - (psi0 + v0*(delta0/Lf)*dt);
       fg[1 + v_start + t]     = v1 - (v0 + a0*dt);
 
       // Udacity solution. propagating errors from prev timestep. WHY?!?

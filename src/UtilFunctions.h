@@ -19,6 +19,7 @@ using CppAD::AD;
 constexpr double pi() { return M_PI; }
 inline double deg2rad(double x) { return x * pi() / 180; }
 inline double rad2deg(double x) { return x * 180 / pi(); }
+inline double mph2mps(double x) { return x*0.44704; }
 
 // Limit angle range within a circle
 inline double wrapAngle(double angle, double upper_limit = 2*M_PI)

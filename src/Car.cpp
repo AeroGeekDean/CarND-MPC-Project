@@ -36,14 +36,14 @@ void Car::update() {
   state << 0.0,     // x pos, [m]
            0.0,     // y pos, [m]
            0.0,     // psi, [rad]
-           myV,     // speed, [mph]
+           myV,     // speed, [m/s]
            myCte,   // [m], + to left of RefTraj
            myPsiErr;// psi_err, [rad] + to left of ref Psi
   myMpc.set_state(state);
 
   myMpc.set_coeff(coeffs);
 
-  myMpc.Solve(mySteerCmd, myAccelCmd);
+  myMpc.Solve(mySteerCmd, myAccelCmd); // the parameters are the OUTPUTS! (passed by ref)
 
 }
 
@@ -56,10 +56,13 @@ void Car::calc_nav_errs() {
   myCte = polyeval(coeffs, 0.0); // Note: polynomial is in body coord already
 
   // calculate the orientation error
-  coeffs_der = polyder(coeffs); // 1st derivative coeff
+  /* Below is the full equation. but since we're evaluating @ x=0, it simplifies to above */
+//  coeffs_der = polyder(coeffs); // 1st derivative coeff
+//  myPsiErr = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
+  double psi_ref_body = -atan(coeffs[1]); // tangent angle of slope
+  myPsiErr = psi_ref_body - 0; // psi of ownship in body axis == 0
 
-  myPsiErr = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
-  refPsi = wrapAngle(myPsi - myPsiErr);  // convert from body to map axis
+  refPsi_map = wrapAngle(myPsi - myPsiErr);  // convert from body to map axis
 
 //  double refPsi_body = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
 //  refPsi = wrapAngle(myPsi - refPsi_body);  // convert from body to map axis

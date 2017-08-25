@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 0;
-double dt = 0;
+//size_t N = 0;
+//double dt = 0;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -27,15 +27,15 @@ double dt = 0;
 MPC::MPC() {
   look_ahead_time = 5.0; // [sec]
   dt = 0.1; // 10 Hz [sec]
-  N = (int) look_ahead_time/dt;
+  N = (size_t) (look_ahead_time/dt);
 }
 
 MPC::~MPC() {}
 
 void MPC::init() {
-  look_ahead_time = 3.0; // [sec]
+  look_ahead_time = 1.0; // [sec]
   dt = 0.1; // 10 Hz [sec]
-  N = (int) look_ahead_time/dt;
+  N = (size_t) (look_ahead_time/dt);
 
   /* Not the cleanest OOP design to make these FG_eval members public
    * but they need to be used by both MPC and FG_eval classes.
@@ -45,7 +45,7 @@ void MPC::init() {
   fg.dt = dt;
   fg.N = N;
 
-  fg.vref = 15; // set reference speed, [mph]
+  fg.vref = mph2mps(50); // set reference speed, [mph]
 
   // The solver takes all the state variables and actuator
   // variables in a singular vector. Thus, we need to establish
@@ -99,6 +99,8 @@ void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
   vars[fg.v_start]     = v;
   vars[fg.cte_start]   = cte;
   vars[fg.epsi_start]  = epsi;
+//  vars[fg.delta_start] = ???;
+//  vars[fg.a_start]     = ???;
 
   // Lower and upper limits for x
   Dvector vars_lowerbound(n_vars);
@@ -113,8 +115,8 @@ void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
   // (-25, 25) [deg] (apply values in [rad]).
   // NOTE: Feel free to change this to something else.
   for (int i = fg.delta_start; i < fg.a_start; i++) {
-    vars_lowerbound[i] = -0.436332; // -25*pi/180
-    vars_upperbound[i] =  0.436332; //  25*pi/180
+    vars_lowerbound[i] = -0.436332*fg.Lf; // -25*pi/180
+    vars_upperbound[i] =  0.436332*fg.Lf; //  25*pi/180
   }
   // Acceleration upper and lower limits.
   // [mph/sec]
@@ -200,13 +202,13 @@ void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
   steer_cmd_out = solution.x[fg.delta_start];
   accel_cmd_out = solution.x[fg.a_start];
 
-  std::cout << (ok ? "OK " : "FAIL ")
-            << ", Cost " << cost
-            << ", Steer " << steer_cmd_out
-            << ", Accel " << accel_cmd_out
-            << ", cte " << cte
-            << ", epsi " << rad2deg(epsi)
-            << std::endl;
+//  std::cout << (ok ? "OK " : "FAIL ")
+//            << ", Cost " << cost
+//            << ", Steer " << steer_cmd_out
+//            << ", Accel " << accel_cmd_out
+//            << ", cte " << cte
+//            << ", epsi " << rad2deg(epsi)
+//            << std::endl;
 
   return;
 }
