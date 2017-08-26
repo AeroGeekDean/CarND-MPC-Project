@@ -5,15 +5,17 @@
 #include <thread>
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
-//#include "Eigen-3.3/Eigen/QR"
-//#include "MPC.h"
 #include "Car.h"
 #include "UtilFunctions.h"
 #include "json.hpp"
 
 // for convenience
 using json = nlohmann::json;
+using namespace std::chrono;
 
+// For keeping track of time to compute dt between data messages
+steady_clock::time_point time_past;
+duration<double> delta_t;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -40,8 +42,7 @@ int main() {
 
   Car myCar;
 
-  // MPC is initialized here!
-//  MPC mpc;
+  static bool sim_initialized = false;
 
   h.onMessage([&myCar](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -56,6 +57,8 @@ int main() {
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
         if (event == "telemetry") {
+          const double Lf = 2.67;
+
           // j[1] is the data JSON object
           std::vector<double> ptsx = j[1]["ptsx"]; // [m] +east
           std::vector<double> ptsy = j[1]["ptsy"]; // [m] +north
@@ -66,6 +69,18 @@ int main() {
           double steer_fb = j[1]["steering_angle"]; // [rad]
           double throttle_fb = j[1]["throttle"]; // [ND] (-1,1)
 
+          if (!sim_initialized)
+          {
+            time_past = steady_clock::now();
+            sim_initialized = true;
+          }
+          // Compute elapsed time since last frame
+          steady_clock::time_point time_now = steady_clock::now();
+          delta_t = duration_cast<duration<double>>( time_now - time_past ); // dt in [sec]
+          double dt = delta_t.count();
+          time_past = time_now; // update past value
+          myCar.set_dt(2*dt);
+
           // Update the Car states
           Car::Coord loc;
             loc.x = px;
@@ -73,6 +88,9 @@ int main() {
           myCar.set_location(loc);
           myCar.set_psi(psi);
           myCar.set_v(mph2mps(v)); // first convert from [mph] to [m/s]
+
+          myCar.set_steerFb(steer_fb);
+          myCar.set_accelFb(throttle_fb);
 
           // convert waypoints (WPT) from map to vehicle body coordinates
           Eigen::VectorXd wptx_body(ptsx.size()); // [m] +fwd
@@ -96,13 +114,14 @@ int main() {
           double steer_value = myCar.get_steerCmd();  // [rad], (+) right turn
           double throttle_value = myCar.get_accelCmd(); // (-1,1)
 
-//          std::cout << "steer = " << rad2deg(steer_value)
-//                    << " steer_fb = " << rad2deg(steer_fb)
-//                    << " throttle = " << throttle_value
-//                    << " throttle_fb = " << throttle_fb
-//                    << std::endl;
+          std::cout << "Hz " << 1./dt
+                    << " dt " << dt << "  |  "
+                    << " steer = " << rad2deg(steer_value)
+                    << " steer_fb = " << rad2deg(steer_fb)*Lf
+                    << " throttle = " << throttle_value
+                    << " throttle_fb = " << throttle_fb
+                    << std::endl;
 
-          const double Lf = 2.67;
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
@@ -193,6 +212,7 @@ int main() {
   h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
                          char *message, size_t length) {
     ws.close();
+    sim_initialized = false;
     std::cout << "Disconnected" << std::endl;
   });
 

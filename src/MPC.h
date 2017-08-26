@@ -14,25 +14,37 @@ class MPC {
   virtual ~MPC();
 
   void init();
-  void set_state(Eigen::VectorXd& ic_state) { this->x0 = ic_state; }
+  void set_state(Eigen::VectorXd& state_ic) { this->x0 = state_ic; }
   void set_coeff(Eigen::VectorXd& coeffs) { fg.set_coeff(coeffs); }
+  void set_control(Eigen::VectorXd& control_ic) { this->u0 = control_ic; }
+  void set_dt(double dt_in) { this->fg.set_dtActual( dt_in ); }
 
   // Solve the model and return the current actuations (steering and accel)
   // Assumes initial state and polynomial coefficients has already been given.
-  void Solve(double& steer_cmd_out, double& accel_cmd_out);
+  void Solve();
+
+  const std::vector<double>& get_output() const { return output; }
 
   const std::vector<double>& getPredTrajX() const { return pred_traj_x; }
   const std::vector<double>& getPredTrajY() const { return pred_traj_y; }
 
  private:
+/*
+  Eigen::VectorXd propagate_model(Eigen::VectorXd& x_in,
+                                  Eigen::VectorXd& u_in,
+                                  double dt);
+*/
 
   double look_ahead_time;   // time horizon, T [sec]
-  double dt;                // dt, [sec]
-  size_t N;                 // num of frames to time horizon
+//  double dt;                // dt, [sec]
+//  size_t N;                 // num of frames to time horizon
 
   FG_eval fg;
 
-  Eigen::VectorXd x0;
+  Eigen::VectorXd x0; // inputed state
+  Eigen::VectorXd u0; // current control inputs
+
+  std::vector<double> output; // MPC's outputs
 
   std::vector<double> pred_traj_x;
   std::vector<double> pred_traj_y;

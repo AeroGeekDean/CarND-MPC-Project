@@ -41,10 +41,18 @@ void Car::update() {
            myPsiErr;// psi_err, [rad] + to left of ref Psi
   myMpc.set_state(state);
 
-  myMpc.set_coeff(coeffs);
+  myMpc.set_coeff(coeffs); // Ref Trajectory
 
-  myMpc.Solve(mySteerCmd, myAccelCmd); // the parameters are the OUTPUTS! (passed by ref)
+  Eigen::VectorXd prev_control(2);
+  prev_control << mySteerFb,
+                  myAccelFb;
+  myMpc.set_control(prev_control);
 
+  myMpc.Solve(); // the parameters are the OUTPUTS! (passed by ref)
+
+  std::vector<double> out = myMpc.get_output();
+  mySteerCmd = out[0];
+  myAccelCmd = out[1];
 }
 
 void Car::calc_nav_errs() {

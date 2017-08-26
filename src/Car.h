@@ -47,6 +47,10 @@ class Car {
   void set_psi(double psi_in)                   {this->myPsi = psi_in;}
   void set_v(double v_in)                       {this->myV = v_in;}
   void setCoeffs(const Eigen::VectorXd& coeffs) {this->coeffs = coeffs;}
+  void set_steerFb(double mySteerFb) { this->mySteerFb = mySteerFb; }
+  void set_accelFb(double myAccelFb) { this->myAccelFb = myAccelFb; }
+  void set_dt(double dt_in) { this->myMpc.set_dt( dt_in ); }
+
 
  private:
 
@@ -58,6 +62,9 @@ class Car {
   double myV;             // [m/s], (+) forward
   double myCte;           // [m], (+) car is LEFT of Ref Traj
   double myPsiErr;        // [rad], (+) car pointing LEFT of Ref heading
+
+  double mySteerFb;      // feedback [rad], (+) right turn
+  double myAccelFb;      // feedback [ND], (+) fwd, normalized range (+/-1)
 
   double mySteerCmd;      // [rad], (+) right turn
   double myAccelCmd;      // [ND], (+) fwd, normalized range (+/-1)

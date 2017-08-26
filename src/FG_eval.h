@@ -24,7 +24,9 @@ class FG_eval {
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
 
   size_t N; // num of frames
-  double dt; // time step, [sec]
+  double dt_model  = 0.1; // time step, [sec]
+  double dt_actual = 0.1; // time step, [sec]
+
   double vref; // reference speed, [m/s]
   // This is the length from front to CoG that has a similar radius.
   const double Lf = 2.67;
@@ -44,6 +46,8 @@ class FG_eval {
   size_t a_start;
 
   void set_coeff(Eigen::VectorXd coeffs) { this->coeffs = coeffs; }
+
+  void set_dtActual(double dt_in) { this->dt_actual = dt_in; }
 
   void operator()(ADvector& fg, const ADvector& vars) {
     // TODO: implement MPC
@@ -117,6 +121,11 @@ class FG_eval {
       AD<double> y1_desired = polyeval(coeffs, x1);
       AD<double> psi_desired = -CppAD::atan(polyeval(polyder(coeffs), x1)); // note: (-1) sign. +slope = -psi !!
 
+      // set the 1st frame dt to be processor actual
+      double dt;
+      if (t==1) dt = dt_actual;
+      else      dt = dt_model;
+
       // Here's `x` to get you started.
       // The idea here is to constraint this value to be 0.
       //
@@ -135,8 +144,8 @@ class FG_eval {
       // (+) epsi   = nose needs to turn right
       fg[1 + x_start + t]     = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[1 + y_start + t]     = y1 - (y0 - v0 * CppAD::sin(psi0) * dt);
-      fg[1 + psi_start + t]   = psi1 - (psi0 + v0*(delta0/Lf)*dt);
-      fg[1 + v_start + t]     = v1 - (v0 + a0*dt);
+      fg[1 + psi_start + t]   = psi1 - (psi0 + v0*(delta0/Lf) * dt);
+      fg[1 + v_start + t]     = v1 - (v0 + a0 * dt);
 
       // Udacity solution. propagating errors from prev timestep. WHY?!?
 //      fg[1 + cte_start + t]   = cte1 - ( (y_desired - y0) + v0 * CppAD::sin(psi0) * dt);

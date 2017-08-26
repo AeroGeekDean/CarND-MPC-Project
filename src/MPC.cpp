@@ -26,24 +26,22 @@ using CppAD::AD;
 //
 MPC::MPC() {
   look_ahead_time = 5.0; // [sec]
-  dt = 0.1; // 10 Hz [sec]
-  N = (size_t) (look_ahead_time/dt);
+  fg.dt_model = 0.1; // 10 Hz [sec]
+  fg.N = (size_t) (look_ahead_time/fg.dt_model);
 }
 
 MPC::~MPC() {}
 
 void MPC::init() {
-  look_ahead_time = 1.0; // [sec]
-  dt = 0.1; // 10 Hz [sec]
-  N = (size_t) (look_ahead_time/dt);
 
   /* Not the cleanest OOP design to make these FG_eval members public
    * but they need to be used by both MPC and FG_eval classes.
    * Perhaps making them friend classes might be an option.
    * But I haven't practiced using C++ 'friendship' feature yet...
    */
-  fg.dt = dt;
-  fg.N = N;
+  look_ahead_time = 1.0; // [sec]
+  fg.dt_model = 0.1; // 10 Hz [sec]
+  fg.N = (size_t) (look_ahead_time/fg.dt_model);
 
   fg.vref = mph2mps(50); // set reference speed, [mph]
 
@@ -51,40 +49,80 @@ void MPC::init() {
   // variables in a singular vector. Thus, we need to establish
   // when one variable starts and another ends to make our life easier.
   fg.x_start     = 0;
-  fg.y_start     = fg.x_start + N;
-  fg.psi_start   = fg.y_start + N;
-  fg.v_start     = fg.psi_start + N;
-  fg.cte_start   = fg.v_start + N;
-  fg.epsi_start  = fg.cte_start + N;
+  fg.y_start     = fg.x_start + fg.N;
+  fg.psi_start   = fg.y_start + fg.N;
+  fg.v_start     = fg.psi_start + fg.N;
+  fg.cte_start   = fg.v_start + fg.N;
+  fg.epsi_start  = fg.cte_start + fg.N;
 
-  fg.delta_start = fg.epsi_start + N;
-  fg.a_start     = fg.delta_start + (N-1); // controls start 1 frame after init states
-
+  fg.delta_start = fg.epsi_start + fg.N;
+  fg.a_start     = fg.delta_start + (fg.N - 1); // controls start 1 frame after init states
 }
 
-void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
+/*
+Eigen::VectorXd MPC::propagate_model(Eigen::VectorXd& x_in, Eigen::VectorXd& u_in, double dt)
+{
+  // assign x_in to local (state)
+  double x0    = x_in[0];
+  double y0    = x_in[1];
+  double psi0  = x_in[2];
+  double v0    = x_in[3];
+  double cte0  = x_in[4];
+  double epsi0 = x_in[5];
+
+  // assign u_in to local (control)
+  double delta0 = u_in[0];
+  double accel0 = u_in[1];
+
+  // model new states
+  double x1 = x0 + v0 * cos(psi0) * dt;
+  double y1 = y0 - v0 * sin(psi0) * dt;
+  double psi1 = psi0 + v0 * (delta0/fg.Lf) * dt;
+  double v1 = v0 * accel0 * dt;
+
+  double y1_desired = polyeval(fg.coeffs, x1);
+  double psi_desired = -atan( polyeval( polyder(fg.coeffs), x1) );
+
+  double cte1 = y1_desired - y1;
+  double epsi1 = psi_desired - psi1;
+
+  // setup output
+  Eigen::VectorXd x_out(6);
+  x_out << x1, y1, psi1, v1, cte1, epsi1;
+  return x_out;
+}
+*/
+
+void MPC::Solve() {
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
   // setup parameters
   size_t num_states = 6;
   size_t num_controls = 2;
 
-  // assign x0 to local for code clarity
+/*
+  // project vehicle state forward by some time, to simulate system time delay
+  double dt = 0.1;
+  Eigen::VectorXd x1 = propagate_model(x0, u0, dt);
+*/
+  // assign x0 & u0 to local for code clarity
   double x    = x0[0];
   double y    = x0[1];
   double psi  = x0[2];
   double v    = x0[3];
   double cte  = x0[4];
   double epsi = x0[5];
+  double delta = u0[0];
+  double accel = u0[1];
 
   // TODO: Set the number of model variables (includes both states and inputs).
   // For example: If the state is a 4 element vector, the actuators is a 2
   // element vector and there are 10 timesteps. The number of variables is:
   // 4*10 + 2*(10-1)
-  size_t n_vars = num_states * N + num_controls * (N-1);
+  size_t n_vars = num_states * fg.N + num_controls * (fg.N - 1);
 
   // Set the number of constraints
-  size_t n_constraints = num_states * N;
+  size_t n_constraints = num_states * fg.N;
 
 //  std::cout << "n_vars = " << n_vars << " n_constraints = " << n_constraints << std::endl;
 
@@ -99,8 +137,8 @@ void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
   vars[fg.v_start]     = v;
   vars[fg.cte_start]   = cte;
   vars[fg.epsi_start]  = epsi;
-//  vars[fg.delta_start] = ???;
-//  vars[fg.a_start]     = ???;
+  vars[fg.delta_start] = delta;
+  vars[fg.a_start]     = accel;
 
   // Lower and upper limits for x
   Dvector vars_lowerbound(n_vars);
@@ -111,17 +149,25 @@ void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
     vars_lowerbound[i] = -1.0e19;
     vars_upperbound[i] =  1.0e19;
   }
-  // The upper and lower limits of delta (steering) are
+
+  // limit the init delta (steering) value to the IC value
+  vars_lowerbound[fg.delta_start] = delta;
+  vars_upperbound[fg.delta_start] = delta;
+  // The upper and lower limits of remaining delta (steering) are
   // (-25, 25) [deg] (apply values in [rad]).
   // NOTE: Feel free to change this to something else.
-  for (int i = fg.delta_start; i < fg.a_start; i++) {
+  for (int i = fg.delta_start+1; i < fg.a_start; i++) {
     vars_lowerbound[i] = -0.436332*fg.Lf; // -25*pi/180
     vars_upperbound[i] =  0.436332*fg.Lf; //  25*pi/180
   }
-  // Acceleration upper and lower limits.
-  // [mph/sec]
+
+  // limit the init accel (throttle) value to the IC value
+  vars_lowerbound[fg.a_start] = accel;
+  vars_upperbound[fg.a_start] = accel;
+  // Upper and lower limits of remaining acceleration
+  // [m/s^2]
   // NOTE: Feel free to change this to something else.
-  for (int i = fg.a_start; i < n_vars; i++) {
+  for (int i = fg.a_start+1; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
@@ -199,8 +245,9 @@ void MPC::Solve(double& steer_cmd_out, double& accel_cmd_out) {
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
 
-  steer_cmd_out = solution.x[fg.delta_start];
-  accel_cmd_out = solution.x[fg.a_start];
+  output.clear();
+  output.push_back(solution.x[fg.delta_start+1]);
+  output.push_back(solution.x[fg.a_start+1]);
 
 //  std::cout << (ok ? "OK " : "FAIL ")
 //            << ", Cost " << cost
