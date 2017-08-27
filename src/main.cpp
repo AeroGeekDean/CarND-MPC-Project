@@ -100,25 +100,25 @@ int main() {
 
           // --- Handle vehicle states ---
 
-//          v *= mph2mps(); // convert speed from [mph] to [m/s] right away
+          v *= mph2mps(); // convert speed from [mph] to [m/s] right away
 
           // Propagate the states forward by the actual MEASURED frame time, dt.
           //
           // ASSUMPTION: dt of previous frame is good predictor of current frame dt.
           // Any artificially imposed latency will be automatically captured by dt.
-//          std::vector<double> x1 = propagate_state_map_coord({px, py, psi, v*mph2mps(), -steer_fb/Lf, throttle_fb}, dt);
+          std::vector<double> x1 = propagate_state_map_coord({px, py, psi, v, -steer_fb/Lf, throttle_fb}, dt);
 
           // update states with propagated values
-//          px = x1[0];
-//          py = x1[1];
-//          psi= x1[2];
-//          v  = x1[3];
+          px = x1[0];
+          py = x1[1];
+          psi= x1[2];
+          v  = x1[3];
 
           // Update the myCar with states
           myCar.set_x(px);
           myCar.set_y(py);
           myCar.set_psi(psi);
-          myCar.set_v(v*mph2mps());
+          myCar.set_v(v);
 
           myCar.set_steerFb(steer_fb);  // <---- these are additional stuff beyond classroom material
           myCar.set_accelFb(throttle_fb);
