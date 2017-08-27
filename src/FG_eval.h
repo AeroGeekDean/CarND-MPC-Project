@@ -92,10 +92,10 @@ class FG_eval {
     for (int t = 1; t < N - 1; t++) {
       if (t==1) dt = dt_actual;
       else      dt = dt_model;
-      AD<double> delta_rate = (vars[delta_start + t] - vars[delta_start + t - 1]); // /dt;
-      AD<double> accel_rate = (vars[a_start + t] - vars[a_start + t - 1]); // /dt; // <--- use actual rates, not just 'consecutive'
-      fg[0] += CppAD::pow(delta_rate, 2) *10;
-      fg[0] += CppAD::pow(accel_rate, 2) ;
+      AD<double> delta_rate = (vars[delta_start + t] - vars[delta_start + t - 1])/dt;
+      AD<double> accel_rate = (vars[a_start + t] - vars[a_start + t - 1])/dt; // <--- use actual rates, not just 'consecutive'
+      fg[0] += CppAD::pow(delta_rate, 2) *0.5;
+      fg[0] += CppAD::pow(accel_rate, 2) *0.05;
     }
 
     //
