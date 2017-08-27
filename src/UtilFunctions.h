@@ -12,6 +12,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include <cppad/cppad.hpp>
 //#include <cppad/ipopt/solve.hpp>
+#include <cassert>
 
 using CppAD::AD;
 
@@ -19,9 +20,15 @@ using CppAD::AD;
 constexpr double pi() { return M_PI; }
 inline double deg2rad(double x) { return x * pi() / 180; }
 inline double rad2deg(double x) { return x * 180 / pi(); }
-inline double mph2mps(double x) { return x*0.44704; }
+
+// [mph] to [meter per sec] conversion.
+// Because I hate having 'magic numbers' spread all over the code base.
+// https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed_numerical_constants
+inline double mph2mps(void) { return 0.44704; }
 
 // Limit angle range within a circle
+// Default is (0, 2pi] if upper_limit param not is supplied
+// otherwise if specified param = pi, then range becomes (-pi, pi]
 inline double wrapAngle(double angle, double upper_limit = 2*M_PI)
 {
   double lower_limit = upper_limit - 2*M_PI;
@@ -30,9 +37,26 @@ inline double wrapAngle(double angle, double upper_limit = 2*M_PI)
   return angle;
 }
 
+// propagate vehicle state, in MAP COORD SYSTEM
+inline std::vector<double> propagate_state_map_coord(std::vector<double> in, double dt)
+{
+  assert(in.size()==6 && "propagate_state_map_coord() input vector size must equal 6 !!");
+  std::vector<double> out;
+  double x0     = in[0];
+  double y0     = in[1];
+  double psi0   = in[2];
+  double v0     = in[3];
+  double steerLf= in[4];
+  double accel  = in[5];
+  out.push_back(x0 + v0*cos(psi0)*dt);    // x1
+  out.push_back(y0 + v0*sin(psi0)*dt);    // y1
+  out.push_back(psi0 + v0*(steerLf)*dt); // psi1
+  out.push_back(v0 + accel*dt);           // v1
+  return out;
+}
 
-// Evaluate a polynomial (overloaded)
-inline AD<double> polyeval(Eigen::VectorXd coeffs, AD<double> x) // CppAD:: version
+// Evaluate a polynomial (overloaded CppAD:: version)
+inline AD<double> polyeval(Eigen::VectorXd coeffs, AD<double> x)
 {
   AD<double> result = 0.0;
   for (int i = 0; i < coeffs.size(); i++) {
@@ -41,8 +65,8 @@ inline AD<double> polyeval(Eigen::VectorXd coeffs, AD<double> x) // CppAD:: vers
   return result;
 }
 
-// Evaluate a polynomial (overloaded)
-inline double polyeval(Eigen::VectorXd coeffs, double x) // std:: version
+// Evaluate a polynomial (overloaded std:: version)
+inline double polyeval(Eigen::VectorXd coeffs, double x)
 {
   double result = 0.0;
   for (int i = 0; i < coeffs.size(); i++) {

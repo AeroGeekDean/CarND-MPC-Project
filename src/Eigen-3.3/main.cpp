@@ -6,7 +6,7 @@
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
 #include "Car.h"
-#include "UtilFunctions.h" // <--- many global functions moved here!!!
+#include "UtilFunctions.h"
 #include "json.hpp"
 
 // for convenience
@@ -57,25 +57,7 @@ int main() {
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
         if (event == "telemetry") {
-
-          // This value assumes the model presented in the classroom is used.
-          //
-          // It was obtained by measuring the radius formed by running the vehicle in the
-          // simulator around in a circle with a constant steering angle and velocity on a
-          // flat terrain.
-          //
-          // Lf was tuned until the the radius formed by the simulating the model
-          // presented in the classroom matched the previous radius.
-          //
-          // This is the length from front to CoG that has a similar radius.
           const double Lf = 2.67;
-
-          std::chrono::milliseconds latency_ms(0); // <------ set controller latency here!!
-
-          if (!sim_initialized) {
-            time_past = steady_clock::now();
-            sim_initialized = true;
-          }
 
           // j[1] is the data JSON object
           std::vector<double> ptsx = j[1]["ptsx"]; // [m] +east
@@ -84,75 +66,58 @@ int main() {
           double py = j[1]["y"]; // [m] +north
           double psi = j[1]["psi"]; // [rad] +CCW from east
           double v = j[1]["speed"]; // [mph]
-
-          // Grabbing control inputs from prv frame. Turns out these have a
-          // TWO frame delay from simulator!! Because asynchronous processes(?).    <---- !!!
           double steer_fb = j[1]["steering_angle"]; // [rad]
           double throttle_fb = j[1]["throttle"]; // [ND] (-1,1)
 
-          // --- Time ---
-
+          if (!sim_initialized)
+          {
+            time_past = steady_clock::now();
+            sim_initialized = true;
+          }
           // Compute elapsed time since last frame
           steady_clock::time_point time_now = steady_clock::now();
           delta_t = duration_cast<duration<double>>( time_now - time_past ); // dt in [sec]
           double dt = delta_t.count();
           time_past = time_now; // update past value
+          myCar.set_dt(2*dt);
 
-          // --- Handle vehicle states ---
-
-//          v *= mph2mps(); // convert speed from [mph] to [m/s] right away
-
-          // Propagate the states forward by the actual MEASURED frame time, dt.
-          //
-          // ASSUMPTION: dt of previous frame is good predictor of current frame dt.
-          // Any artificially imposed latency will be automatically captured by dt.
-//          std::vector<double> x1 = propagate_state_map_coord({px, py, psi, v*mph2mps(), -steer_fb/Lf, throttle_fb}, dt);
-
-          // update states with propagated values
-//          px = x1[0];
-//          py = x1[1];
-//          psi= x1[2];
-//          v  = x1[3];
-
-          // Update the myCar with states
-          myCar.set_x(px);
-          myCar.set_y(py);
+          // Update the Car states
+          Car::Coord loc;
+            loc.x = px;
+            loc.y = py;
+          myCar.set_location(loc);
           myCar.set_psi(psi);
-          myCar.set_v(v*mph2mps());
+          myCar.set_v(mph2mps(v)); // first convert from [mph] to [m/s]
 
-          myCar.set_steerFb(steer_fb);  // <---- these are additional stuff beyond classroom material
+          myCar.set_steerFb(steer_fb);
           myCar.set_accelFb(throttle_fb);
-//          myCar.set_dt(dt); // no need, since we propagated ahead already.
 
-          // --- Handle waypoints (WPT) ---
-
+          // convert waypoints (WPT) from map to vehicle body coordinates
           Eigen::VectorXd wptx_body(ptsx.size()); // [m] +fwd
           Eigen::VectorXd wpty_body(ptsy.size()); // [m] +left
-
-          // convert from map to vehicle body coordinates
           for (size_t i=0; i<ptsx.size(); i++) {
-            myCar.map2body(ptsx[i], ptsy[i], wptx_body(i), wpty_body(i));
+            Car::Coord map_coord;
+              map_coord.x = ptsx[i];
+              map_coord.y = ptsy[i];
+            Car::Coord body_coord = myCar.map2body(map_coord);
+            wptx_body(i) = body_coord.x;
+            wpty_body(i) = body_coord.y;
           }
-
-          int order_n = 3;
           // Find coeffs of n-th polynomial curve fit
+          int order_n = 3; // order of polynominal for curve fitting
           Eigen::VectorXd coeffs = polyfit(wptx_body, wpty_body, order_n);
           myCar.setCoeffs(coeffs);
 
-          // --- Run MPC ---
+          myCar.calc_nav_errs();
+          myCar.update();
 
-          myCar.calc_nav_errs(); // find cte & psi_err
-          myCar.update(); // MPC is contained within myCar
-
-          // -- handle Outputs ---
-
-          double steer_value    = myCar.get_steerCmd()/Lf;  // [rad], (+) right turn
+          double steer_value = myCar.get_steerCmd();  // [rad], (+) right turn
           double throttle_value = myCar.get_accelCmd(); // (-1,1)
 
           std::cout << "Hz " << 1./dt
                     << " dt " << dt << "  |  "
                     << " steer = " << rad2deg(steer_value)
-                    << " steer_fb = " << rad2deg(steer_fb)
+                    << " steer_fb = " << rad2deg(steer_fb)*Lf
                     << " throttle = " << throttle_value
                     << " throttle_fb = " << throttle_fb
                     << std::endl;
@@ -160,22 +125,20 @@ int main() {
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value/deg2rad(25);
+          msgJson["steering_angle"] = steer_value/Lf/deg2rad(25);
           msgJson["throttle"] = throttle_value;
-//          msgJson["steering_angle"] = 0.0;
-//          msgJson["throttle"] = 0.0;
 
-          // --- Display MPC trajectory ---
-
+          //Display the MPC predicted trajectory 
           std::vector<double> mpc_x_vals;
           std::vector<double> mpc_y_vals;
-
-          myCar.get_predTraj(mpc_x_vals, mpc_y_vals);
 
           // TESTING: verifying my different coordinate systems and their
           //          transformation are correct, by drawing a straight tangent
           //          line at some distance ahead of the curve-fitted Ref Trajectory
 //          myCar.test_polyder(mpc_x_vals, mpc_y_vals);
+
+          myCar.get_predTraj(mpc_x_vals, mpc_y_vals);
+
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
@@ -183,21 +146,25 @@ int main() {
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
-          // --- Display Ref trajectory ---
-
+          //For display of the waypoints/reference line
           std::vector<double> next_x_vals;
           std::vector<double> next_y_vals;
 
-          // TESTING: show the raw WPTS, without curve fitting
-          next_x_vals.assign(wptx_body.data(), wptx_body.data()+wptx_body.size());
-          next_y_vals.assign(wpty_body.data(), wpty_body.data()+wpty_body.size());
+          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
+          // the points in the simulator are connected by a Yellow line
+
+          // TESTING: plotting the raw WPTS directly, without curve fitting
+//          next_x_vals.assign(wptx_body.data(), wptx_body.data()+wptx_body.size());
+//          next_y_vals.assign(wpty_body.data(), wpty_body.data()+wpty_body.size());
 
           // generate curve fitted Ref Traj
-//          double dx = 5; // segment lenth [m]
-//          for (int i=0; i<10; i++) { // projecting 10 segments forward
-//            next_x_vals.push_back(dx*i);
-//            next_y_vals.push_back(polyeval(coeffs, dx*i));
-//          }
+          double dx = 5;
+          double x;
+          for (int i=0; i<10; i++) { // line projecting 50 [m] forward
+            x = dx*i;
+            next_x_vals.push_back(x);
+            next_y_vals.push_back(polyeval(coeffs, x));
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
@@ -213,7 +180,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          std::this_thread::sleep_for(std::chrono::milliseconds(latency_ms));
+//          std::this_thread::sleep_for(std::chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {

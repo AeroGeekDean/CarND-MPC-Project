@@ -11,33 +11,29 @@
 #include "UtilFunctions.h"
 
 Car::Car() {
-  myMpc.init();
+  myMpc.init(); // don't forget this again!
 }
 
 Car::~Car() {
 }
 
-Car::Coord Car::map2body(Car::Coord& in_map) {
-  double dxm = in_map.x - myPos.x;
-  double dym = in_map.y - myPos.y;
-  Coord out_body;
-  out_body.x = dxm*cos(myPsi) + dym*sin(myPsi);
-  out_body.y =-dxm*sin(myPsi) + dym*cos(myPsi);
-  return out_body;
+void Car::map2body(double& x_map, double& y_map,
+                   double& x_b, double& y_b) {
+  double dxm = x_map - myX;
+  double dym = y_map - myY;
+  x_b = dxm*cos(myPsi) + dym*sin(myPsi);
+  y_b =-dxm*sin(myPsi) + dym*cos(myPsi);
 }
 
 void Car::update() {
-
-  // update MPC with current vehicle states
-  Eigen::VectorXd state(6);
-
   // Note - since we're doing everything in vehicle axis
   // x, y, and psi are ALL 0.0 since the car is at the origin
+  Eigen::VectorXd state(6);
   state << 0.0,     // x pos, [m]
            0.0,     // y pos, [m]
            0.0,     // psi, [rad]
            myV,     // speed, [m/s]
-           myCte,   // [m], + to left of RefTraj
+           myCte,   // [m], + to right of RefTraj
            myPsiErr;// psi_err, [rad] + to left of ref Psi
   myMpc.set_state(state);
 
@@ -48,7 +44,7 @@ void Car::update() {
                   myAccelFb;
   myMpc.set_control(prev_control);
 
-  myMpc.Solve(); // the parameters are the OUTPUTS! (passed by ref)
+  myMpc.Solve();
 
   std::vector<double> out = myMpc.get_output();
   mySteerCmd = out[0];
@@ -60,34 +56,28 @@ void Car::calc_nav_errs() {
   // Thus car's (x, y) = (0, 0)
 
   // calculate the cross track error
-
-  myCte = polyeval(coeffs, 0.0); // Note: polynomial is in body coord already
+//  myCte = polyeval(coeffs, 0.0);
+  myCte = coeffs[0];
 
   // calculate the orientation error
-  /* Below is the full equation. but since we're evaluating @ x=0, it simplifies to above */
-//  coeffs_der = polyder(coeffs); // 1st derivative coeff
-//  myPsiErr = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
-  double psi_ref_body = -atan(coeffs[1]); // tangent angle of slope
-  myPsiErr = psi_ref_body - 0; // psi of ownship in body axis == 0
-
-  refPsi_map = wrapAngle(myPsi - myPsiErr);  // convert from body to map axis
-
-//  double refPsi_body = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
-//  refPsi = wrapAngle(myPsi - refPsi_body);  // convert from body to map axis
-//  myPsiErr = wrapAngle((refPsi - myPsi), M_PI); // for control system, use +/-pi
+  //coeffs_der = polyder(coeffs); // 1st derivative coeff
+  //myPsiErr = -atan(polyeval(coeffs_der, 0.0)); // tangent angle of slope
+/* Above is the full equation. but since we're evaluating @ x=0, it simplifies to below*/
+  myPsiErr = -atan(coeffs[1]); // psi of ownship in body axis == 0
 }
 
 void Car::get_predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out) {
-  xs_out = myMpc.getPredTrajX();
-  ys_out = myMpc.getPredTrajY();
+  xs_out = myMpc.get_PredTrajX();
+  ys_out = myMpc.get_PredTrajY();
 }
 
+
+/*
+ * This method draws 3 dots that are tangent to the Ref Traj at distance `ahead_x`
+ * Supply the method with the x,y vectors for the MPC trajectory to visualize.
+ * For testing the functions in PolyUtil.h are working properly.
+ */
 void Car::test_polyder(std::vector<double>& xs_out, std::vector<double>& ys_out) {
-  /*
-   * This method draws 3 dots that are tangent to the Ref Traj at distance `ahead_x`
-   * Supply the method with the x,y vectors for the MPC trajectory to visualize.
-   * For testing the functions in PolyUtil.h are working properly.
-   */
   double seg_len = 10.0;
   double ahead_x = 20.0; // how far ahead of car to calc tangent
   double ahead_y = polyeval(coeffs, ahead_x);

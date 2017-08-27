@@ -15,13 +15,17 @@
 class Car {
  public:
 
-  struct Coord {
-    double x;
-    double y;
-  };
+//  struct Coord {
+//    double x;
+//    double y;
+//  };
 
   Car();
   virtual ~Car();
+
+  // convert from map to body coordinates
+  void map2body(double& x_map, double& y_map,
+                double& x_b, double& y_b);
 
   void calc_nav_errs();
 
@@ -33,17 +37,11 @@ class Car {
   void get_predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out);
   void test_polyder(std::vector<double>& xs_out, std::vector<double>& ys_out);
 
-  // convert from map to body coordinates
-  Coord map2body(Car::Coord& in_map);
-
-  // Accessor methods
-  const Car::Coord& get_location() const    {return myPos;}
-  const double get_psi() const              {return myPsi;}
-  const double get_v() const                {return myV;}
-  const Eigen::VectorXd& getCoeffs() const  {return coeffs;}
+  MPC& get_mpc() { return myMpc; }
 
   // Mutator methods
-  void set_location(Car::Coord& loc_in)         {this->myPos = loc_in;}
+  void set_x(double x_in)                       {this->myX = x_in;}
+  void set_y(double y_in)                       {this->myY = y_in;}
   void set_psi(double psi_in)                   {this->myPsi = psi_in;}
   void set_v(double v_in)                       {this->myV = v_in;}
   void setCoeffs(const Eigen::VectorXd& coeffs) {this->coeffs = coeffs;}
@@ -57,7 +55,8 @@ class Car {
   MPC myMpc;  // ModelPredictiveController
 
   // car's own state (in map coordinate system)
-  Coord myPos;            // [m], (+) east/north
+  double myX;             // [m], (+) east
+  double myY;             // [m], (+) north
   double myPsi;           // [rad], map axis, (+) CCW from east
   double myV;             // [m/s], (+) forward
   double myCte;           // [m], (+) car is LEFT of Ref Traj
@@ -71,7 +70,6 @@ class Car {
 
   Eigen::VectorXd coeffs; // Ref trajectory polyfitted coeffs, in body axis
   Eigen::VectorXd coeffs_der; // coeff of Ref Traj's 1st derivative (ie: slope)
-  double refPsi_map;      // Ref heading in map axis
 };
 
 #endif /* CAR_H_ */

@@ -5,26 +5,11 @@
 
 using CppAD::AD;
 
-// TODO: Set the timestep length and duration
-//size_t N = 0;
-//double dt = 0;
-
-// This value assumes the model presented in the classroom is used.
-//
-// It was obtained by measuring the radius formed by running the vehicle in the
-// simulator around in a circle with a constant steering angle and velocity on a
-// flat terrain.
-//
-// Lf was tuned until the the radius formed by the simulating the model
-// presented in the classroom matched the previous radius.
-//
-// This is the length from front to CoG that has a similar radius.
-//const double Lf = 2.67;
-
 //
 // MPC class definition implementation.
 //
 MPC::MPC() {
+  // set some default value, to safe guard against forgetting to call init() later...
   look_ahead_time = 5.0; // [sec]
   fg.dt_model = 0.1; // 10 Hz [sec]
   fg.N = (size_t) (look_ahead_time/fg.dt_model);
@@ -34,16 +19,11 @@ MPC::~MPC() {}
 
 void MPC::init() {
 
-  /* Not the cleanest OOP design to make these FG_eval members public
-   * but they need to be used by both MPC and FG_eval classes.
-   * Perhaps making them friend classes might be an option.
-   * But I haven't practiced using C++ 'friendship' feature yet...
-   */
   look_ahead_time = 1.0; // [sec]
   fg.dt_model = 0.1; // 10 Hz [sec]
   fg.N = (size_t) (look_ahead_time/fg.dt_model);
 
-  fg.vref = mph2mps(50); // set reference speed, [mph]
+  fg.vref = 50*mph2mps(); // <----   set reference speed, [mph]
 
   // The solver takes all the state variables and actuator
   // variables in a singular vector. Thus, we need to establish
@@ -59,39 +39,6 @@ void MPC::init() {
   fg.a_start     = fg.delta_start + (fg.N - 1); // controls start 1 frame after init states
 }
 
-/*
-Eigen::VectorXd MPC::propagate_model(Eigen::VectorXd& x_in, Eigen::VectorXd& u_in, double dt)
-{
-  // assign x_in to local (state)
-  double x0    = x_in[0];
-  double y0    = x_in[1];
-  double psi0  = x_in[2];
-  double v0    = x_in[3];
-  double cte0  = x_in[4];
-  double epsi0 = x_in[5];
-
-  // assign u_in to local (control)
-  double delta0 = u_in[0];
-  double accel0 = u_in[1];
-
-  // model new states
-  double x1 = x0 + v0 * cos(psi0) * dt;
-  double y1 = y0 - v0 * sin(psi0) * dt;
-  double psi1 = psi0 + v0 * (delta0/fg.Lf) * dt;
-  double v1 = v0 * accel0 * dt;
-
-  double y1_desired = polyeval(fg.coeffs, x1);
-  double psi_desired = -atan( polyeval( polyder(fg.coeffs), x1) );
-
-  double cte1 = y1_desired - y1;
-  double epsi1 = psi_desired - psi1;
-
-  // setup output
-  Eigen::VectorXd x_out(6);
-  x_out << x1, y1, psi1, v1, cte1, epsi1;
-  return x_out;
-}
-*/
 
 void MPC::Solve() {
   typedef CPPAD_TESTVECTOR(double) Dvector;
@@ -106,19 +53,17 @@ void MPC::Solve() {
   Eigen::VectorXd x1 = propagate_model(x0, u0, dt);
 */
   // assign x0 & u0 to local for code clarity
-  double x    = x0[0];
-  double y    = x0[1];
-  double psi  = x0[2];
-  double v    = x0[3];
-  double cte  = x0[4];
-  double epsi = x0[5];
+  double x     = x0[0];
+  double y     = x0[1];
+  double psi   = x0[2];
+  double v     = x0[3];
+  double cte   = x0[4];
+  double epsi  = x0[5];
+
   double delta = u0[0];
   double accel = u0[1];
 
-  // TODO: Set the number of model variables (includes both states and inputs).
-  // For example: If the state is a 4 element vector, the actuators is a 2
-  // element vector and there are 10 timesteps. The number of variables is:
-  // 4*10 + 2*(10-1)
+  // Set the number of model variables (includes both states and inputs).
   size_t n_vars = num_states * fg.N + num_controls * (fg.N - 1);
 
   // Set the number of constraints
@@ -137,12 +82,14 @@ void MPC::Solve() {
   vars[fg.v_start]     = v;
   vars[fg.cte_start]   = cte;
   vars[fg.epsi_start]  = epsi;
-  vars[fg.delta_start] = delta;
-  vars[fg.a_start]     = accel;
+
+  vars[fg.delta_start] = delta;  // <---- I added init condition of controls as well.
+  vars[fg.a_start]     = accel;  //       These were missing in classroom!!!
 
   // Lower and upper limits for x
   Dvector vars_lowerbound(n_vars);
   Dvector vars_upperbound(n_vars);
+
   // Set all non-actuators upper and lower limits
   // to the max negative and positive values.
   for (int i = 0; i < fg.delta_start; i++) {
@@ -150,27 +97,27 @@ void MPC::Solve() {
     vars_upperbound[i] =  1.0e19;
   }
 
-  // limit the init delta (steering) value to the IC value
-  vars_lowerbound[fg.delta_start] = delta;
-  vars_upperbound[fg.delta_start] = delta;
   // The upper and lower limits of remaining delta (steering) are
   // (-25, 25) [deg] (apply values in [rad]).
-  // NOTE: Feel free to change this to something else.
-  for (int i = fg.delta_start+1; i < fg.a_start; i++) {
-    vars_lowerbound[i] = -0.436332*fg.Lf; // -25*pi/180
-    vars_upperbound[i] =  0.436332*fg.Lf; //  25*pi/180
+  for (int i = fg.delta_start; i < fg.a_start; i++) {
+    vars_lowerbound[i] = deg2rad(-20)*fg.Lf;
+    vars_upperbound[i] = deg2rad(20)*fg.Lf;
   }
 
-  // limit the init accel (throttle) value to the IC value
-  vars_lowerbound[fg.a_start] = accel;
-  vars_upperbound[fg.a_start] = accel;
+  // limit the init delta (steering) value to the IC value
+// vars_lowerbound[fg.delta_start] = delta*fg.Lf;  // <--- used bounds to constraint steering init cond
+// vars_upperbound[fg.delta_start] = delta*fg.Lf;
+
   // Upper and lower limits of remaining acceleration
-  // [m/s^2]
-  // NOTE: Feel free to change this to something else.
-  for (int i = fg.a_start+1; i < n_vars; i++) {
+  // [-1,1] normalized, [m/s^2]
+  for (int i = fg.a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
+
+  // limit the init accel (throttle) value to the IC value
+//   vars_lowerbound[fg.a_start] = accel;  // <---- used bounds to constraint throttle init cond
+//   vars_upperbound[fg.a_start] = accel;
 
   // Lower and upper limits for the constraints
   // Should be 0 besides initial state.
@@ -193,9 +140,6 @@ void MPC::Solve() {
   constraints_upperbound[fg.v_start]     = v;
   constraints_upperbound[fg.cte_start]   = cte;
   constraints_upperbound[fg.epsi_start]  = epsi;
-
-  //  // object that computes objective and constraints
-//    FG_eval fg_eval(coeffs); // it's now a private member of MPC class
 
   //
   // NOTE: You don't have to worry about these options
@@ -230,31 +174,54 @@ void MPC::Solve() {
   // Cost
   auto cost = solution.obj_value;
 
-  // Save off predicted trajectory for MPC plotting
+  // <--- would be nice if simulator dashboard could show status of MPC... --->
+
   pred_traj_x.clear();
   pred_traj_y.clear();
+  pred_psi.clear();
+  pred_v.clear();
+  pred_cte.clear();
+  pred_epsi.clear();
+  pred_delta.clear();
+  pred_a.clear();
 
-  for (int i=1; i < fg.N; i++) {
-    pred_traj_x.push_back(solution.x[fg.x_start+i]);
-    pred_traj_y.push_back(solution.x[fg.y_start+i]);
+  // Save off predicted trajectory for MPC plotting
+  for (int i=0; i<fg.N; i++) {
+    pred_traj_x.push_back(solution.x[fg.x_start + i]);
+    pred_traj_y.push_back(solution.x[fg.y_start + i]);
+
+    pred_psi.push_back(solution.x[fg.psi_start + i]);
+    pred_v.push_back(solution.x[fg.v_start + i]);
+    pred_cte.push_back(solution.x[fg.cte_start + i]);
+    pred_epsi.push_back(solution.x[fg.epsi_start + i]);
+
+    // Controls have 1 less element. Thus repeat fill last element
+    if (i==(fg.N-1)) {
+      pred_delta.push_back(solution.x[fg.delta_start + i -1]);
+      pred_a.push_back(solution.x[fg.a_start + i -1]);
+    }
+    else {
+      pred_delta.push_back(solution.x[fg.delta_start + i]);
+      pred_a.push_back(solution.x[fg.a_start + i]);
+    }
   }
 
-  // TODO: Return the first actuator values. The variables can be accessed with
+  // Return the first actuator values. The variables can be accessed with
   // `solution.x[i]`.
   //
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
 
   output.clear();
-  output.push_back(solution.x[fg.delta_start+1]);
-  output.push_back(solution.x[fg.a_start+1]);
+//  output.push_back(solution.x[fg.delta_start + 1]); // <--- recall first timeslot is init condition
+//  output.push_back(solution.x[fg.a_start + 1]);
+  output.push_back(solution.x[fg.delta_start]);
+  output.push_back(solution.x[fg.a_start]);
 
 //  std::cout << (ok ? "OK " : "FAIL ")
 //            << ", Cost " << cost
-//            << ", Steer " << steer_cmd_out
-//            << ", Accel " << accel_cmd_out
-//            << ", cte " << cte
-//            << ", epsi " << rad2deg(epsi)
+//            << ", Steer " << output[0]
+//            << ", Accel " << output[1]
 //            << std::endl;
 
   return;
