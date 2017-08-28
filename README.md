@@ -10,6 +10,7 @@ Here's a composit video of my results from this project.
 #### 55 mph with 100ms delay in the MPC process
 
 Click image below for YouTube video.
+
 [![55 mph with 100ms delay](http://img.youtube.com/vi/hsZVZ6lffzY/0.jpg)](https://www.youtube.com/watch?v=hsZVZ6lffzY)
 
 The video contains 2 laps around the track with no added latency for baseline performance. It's then followed by 3 laps with 100ms of time delay added to the each frame of the MPC process.
