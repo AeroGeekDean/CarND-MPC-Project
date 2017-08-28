@@ -2,6 +2,7 @@
 #include <uWS/uWS.h>
 #include <chrono>
 #include <iostream>
+#include <iomanip>
 #include <thread>
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
@@ -70,7 +71,7 @@ int main() {
           // This is the length from front to CoG that has a similar radius.
           const double Lf = 2.67;
 
-          std::chrono::milliseconds latency_ms(0); // <------ set controller latency here!!
+          std::chrono::milliseconds latency_ms(100); // <------ set controller latency here!!
 
           if (!sim_initialized) {
             time_past = steady_clock::now();
@@ -149,12 +150,13 @@ int main() {
           double steer_value    = myCar.get_steerCmd()/Lf;  // [rad], (+) right turn
           double throttle_value = myCar.get_accelCmd(); // (-1,1)
 
-          std::cout << "Hz " << 1./dt
-                    << " dt " << dt << "  |  "
-                    << " steer = " << rad2deg(steer_value)
-                    << " steer_fb = " << rad2deg(steer_fb)
-                    << " throttle = " << throttle_value
-                    << " throttle_fb = " << throttle_fb
+          std::cout << std::fixed << std::setprecision(3);
+          std::cout << "Hz " << std::setw(6) << 1./dt
+                    << "  dt " << std::setw(5) << dt << "  |"
+                    << "  steer = " << std::setw(7) << rad2deg(steer_value)
+                    << "  steer_fb = " << std::setw(7) << rad2deg(steer_fb)
+                    << "  throttle = " << std::setw(6) << throttle_value
+                    << "  throttle_fb = " << std::setw(6) << throttle_fb
                     << std::endl;
 
           json msgJson;

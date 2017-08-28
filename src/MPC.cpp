@@ -178,32 +178,33 @@ void MPC::Solve() {
 
   pred_traj_x.clear();
   pred_traj_y.clear();
-  pred_psi.clear();
-  pred_v.clear();
-  pred_cte.clear();
-  pred_epsi.clear();
-  pred_delta.clear();
-  pred_a.clear();
+//  pred_psi.clear();
+//  pred_v.clear();
+//  pred_cte.clear();
+//  pred_epsi.clear();
+//  pred_delta.clear();
+//  pred_a.clear();
 
   // Save off predicted trajectory for MPC plotting
   for (int i=0; i<fg.N; i++) {
     pred_traj_x.push_back(solution.x[fg.x_start + i]);
     pred_traj_y.push_back(solution.x[fg.y_start + i]);
 
-    pred_psi.push_back(solution.x[fg.psi_start + i]);
-    pred_v.push_back(solution.x[fg.v_start + i]);
-    pred_cte.push_back(solution.x[fg.cte_start + i]);
-    pred_epsi.push_back(solution.x[fg.epsi_start + i]);
-
-    // Controls have 1 less element. Thus repeat fill last element
-    if (i==(fg.N-1)) {
-      pred_delta.push_back(solution.x[fg.delta_start + i -1]);
-      pred_a.push_back(solution.x[fg.a_start + i -1]);
-    }
-    else {
-      pred_delta.push_back(solution.x[fg.delta_start + i]);
-      pred_a.push_back(solution.x[fg.a_start + i]);
-    }
+    // Save MPC's predicted states, for debug purpose
+//    pred_psi.push_back(solution.x[fg.psi_start + i]);
+//    pred_v.push_back(solution.x[fg.v_start + i]);
+//    pred_cte.push_back(solution.x[fg.cte_start + i]);
+//    pred_epsi.push_back(solution.x[fg.epsi_start + i]);
+//
+//    // Controls have 1 less element. Thus repeat fill last element
+//    if (i==(fg.N-1)) {
+//      pred_delta.push_back(solution.x[fg.delta_start + i -1]);
+//      pred_a.push_back(solution.x[fg.a_start + i -1]);
+//    }
+//    else {
+//      pred_delta.push_back(solution.x[fg.delta_start + i]);
+//      pred_a.push_back(solution.x[fg.a_start + i]);
+//    }
   }
 
   // Return the first actuator values. The variables can be accessed with
@@ -213,8 +214,6 @@ void MPC::Solve() {
   // creates a 2 element double vector.
 
   output.clear();
-//  output.push_back(solution.x[fg.delta_start + 1]); // <--- recall first timeslot is init condition
-//  output.push_back(solution.x[fg.a_start + 1]);
   output.push_back(solution.x[fg.delta_start]);
   output.push_back(solution.x[fg.a_start]);
 
