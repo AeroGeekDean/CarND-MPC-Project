@@ -22,12 +22,11 @@ class FG_eval {
   virtual ~FG_eval() {};
 
   void set_coeff(Eigen::VectorXd coeffs)  { this->coeffs = coeffs; }
-  void set_dtActual(double dt_in)         { this->dt_actual = dt_in; }
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
 
   /*
-   * Poor Object Oriented design to make these FG_eval members public,
+   * Not the best Object Oriented design to make these FG_eval members public,
    * but they need to be used by both MPC and FG_eval classes.
    * Perhaps making them friend classes might be an option.
    * Tho I haven't practiced using C++ 'friendship' feature yet. Thus avoided that method...
@@ -47,12 +46,7 @@ class FG_eval {
 
   size_t N; // num of frames
 
-  /*
-   * The dt for the first time slot will be set to the actual process frame rate (including actual measured latency)
-   */
-  double dt_actual = 0.1; // time step, [sec] <--- gets over ride by mutator method later on each frame
-  double dt_model  = 0.1; // time step, [sec] for rest of the time slots
-  double dt;  // variable actually used by the model
+  double dt_model  = 0.1; // time step, [sec] used for forward prediction
 
   double vref; // reference speed, [m/s]
 
@@ -61,11 +55,14 @@ class FG_eval {
 
   Eigen::VectorXd coeffs; // Fitted polynomial coefficients
 
+  // previous frame's control inputs
+  double delta0;
+  double accel0;
+
   // --- operator() method ---
 
   void operator()(ADvector& fg, const ADvector& vars) {
     // `fg` a vector of the cost constraints, `vars` is a vector of variable values (state & actuators)
-
 
     // The cost is stored is the first element of `fg`.
     // Any additions to the cost should be added to `fg[0]`.
@@ -77,12 +74,12 @@ class FG_eval {
 
     // The part of the cost based on the reference state.
     for (int t = 0; t < N; t++) {
-      fg[0] += CppAD::pow(vars[cte_start + t], 2);
-      fg[0] += CppAD::pow(vars[epsi_start + t], 2)*10;
-      fg[0] += CppAD::pow(vars[v_start + t] - vref, 2);
+      fg[0] += CppAD::pow(vars[cte_start + t], 2) *3; // <--- Don't fixate over zeroing out CTE. It'll cause oscillation.
+      fg[0] += CppAD::pow(vars[epsi_start + t], 2) *100; //<--- More important to nail the heading, to help guide down path
+      fg[0] += CppAD::pow(vars[v_start + t] - vref, 2); // <--- Speed is low frequency dynamic, thus low priority gain
     }
 
-    // Minimize the use of actuators. <--- this is a bad idea! On a steady turn, it'll force car towards outside of turn!
+    // Minimize the use of actuators. <--- Don't like these. Penalizes for steady turn input = push car to outside of turn.
 //    for (int t = 0; t < N - 1; t++) {
 //      fg[0] += CppAD::pow(vars[delta_start + t], 2)*0.01;
 //      fg[0] += CppAD::pow(vars[a_start + t], 2);
@@ -90,13 +87,16 @@ class FG_eval {
 
     // Minimize the actuation rates.
     for (int t = 1; t < N - 1; t++) {
-      if (t==1) dt = dt_actual;
-      else      dt = dt_model;
-      AD<double> delta_rate = (vars[delta_start + t] - vars[delta_start + t - 1])/dt;
-      AD<double> accel_rate = (vars[a_start + t] - vars[a_start + t - 1])/dt; // <--- use actual rates, not just 'consecutive'
-      fg[0] += CppAD::pow(delta_rate, 2) *0.5;
-      fg[0] += CppAD::pow(accel_rate, 2) *0.05;
+      // use actual rates, not just differences of 'consecutive' elements   ---> vvvv
+      AD<double> delta_rate = (vars[delta_start + t] - vars[delta_start + t - 1])/dt_model;
+      AD<double> accel_rate = (vars[a_start + t] - vars[a_start + t - 1])/dt_model;
+      fg[0] += CppAD::pow(delta_rate, 2) *0.1;  // reduce to previous nominal gain order of magnitude
+      fg[0] += CppAD::pow(accel_rate, 2) *0.05; // reduce to previous nominal gain order of magnitude
     }
+
+    // Also penalize deviation from previous frame's control inputs.
+    fg[0] += CppAD::pow( (vars[delta_start] - delta0)/dt_model, 2) *0.1;
+    fg[0] += CppAD::pow( (vars[a_start] - accel0)/dt_model, 2) *0.05;
 
     //
     // Setup Constraints
@@ -137,10 +137,6 @@ class FG_eval {
       AD<double> y1_desired = polyeval(coeffs, x1);
       AD<double> psi_desired = -CppAD::atan(polyeval(polyder(coeffs), x1)); // note: negative sign. +slope = -psi !!
 
-      // set the 1st frame dt to be processor actual
-      if (t==1) dt = dt_actual;
-      else      dt = dt_model;
-
       // Here's `x` to get you started.
       // The idea here is to constraint this value to be 0.
       //
@@ -156,17 +152,17 @@ class FG_eval {
       // (+) v      = fwd
       // (+) delta  = right turn
       // (+) cte    = car is right of Ref Trajectory
-      // (+) epsi   = nose needs to turn right
-      fg[1 + x_start + t]   = x1   - (x0 + v0 * CppAD::cos(psi0) * dt);
-      fg[1 + y_start + t]   = y1   - (y0 - v0 * CppAD::sin(psi0) * dt);
-      fg[1 + psi_start + t] = psi1 - (psi0 + v0*(delta0/Lf) * dt);
-      fg[1 + v_start + t]   = v1   - (v0 + a0 * dt);
+      // (+) epsi   = Ref heading is right of nose
+      fg[1 + x_start + t]   = x1   - (x0 + v0 * CppAD::cos(psi0) * dt_model);
+      fg[1 + y_start + t]   = y1   - (y0 - v0 * CppAD::sin(psi0) * dt_model);
+      fg[1 + psi_start + t] = psi1 - (psi0 + v0*(delta0/Lf) * dt_model);
+      fg[1 + v_start + t]   = v1   - (v0 + a0 * dt_model);
 
-      // Udacity solution. propagating errors from prev timestep. WHY?!? <--- I think there's a better way...
+      // Udacity solution. propagating errors from prev timestep. but WHY?!? <--- I think there's a better way...
 //      fg[1 + cte_start + t]   = cte1 - ( (y_desired - y0) + v0 * CppAD::sin(psi0) * dt);
 //      fg[1 + epsi_start + t]  = epsi1 - ( (psi_desired - epsi0) + v0/Lf*delta0*dt);
 
-      // My "direct method" solution, and it works       <--- Here is the better way!! :)
+      // My "direct method" solution, and it works       <--- Here is the better way!! :-)
       fg[1 + cte_start + t]   = cte1 - (y1_desired - y1);
       fg[1 + epsi_start + t]  = epsi1 - (psi_desired - psi1);
     } // for loop

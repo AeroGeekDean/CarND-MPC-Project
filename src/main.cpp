@@ -107,7 +107,7 @@ int main() {
           //
           // ASSUMPTION: dt of previous frame is good predictor of current frame dt.
           // Any artificially imposed latency will be automatically captured by dt.
-          std::vector<double> x1 = propagate_state_map_coord({px, py, psi, v, -steer_fb/Lf, throttle_fb}, dt);
+          std::vector<double> x1 = propagate_state_map_coord({px, py, psi, v, -steer_fb/Lf, throttle_fb}, dt*1.1);
 
           // update states with propagated values
           px = x1[0];
@@ -123,7 +123,6 @@ int main() {
 
           myCar.set_steerFb(steer_fb);  // <---- these are additional stuff beyond classroom material
           myCar.set_accelFb(throttle_fb);
-//          myCar.set_dt(dt); // no need, since we propagated ahead already.
 
           // --- Handle waypoints (WPT) ---
 
@@ -164,8 +163,6 @@ int main() {
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
           msgJson["steering_angle"] = steer_value/deg2rad(25);
           msgJson["throttle"] = throttle_value;
-//          msgJson["steering_angle"] = 0.0;
-//          msgJson["throttle"] = 0.0;
 
           // --- Display MPC trajectory ---
 
@@ -191,15 +188,16 @@ int main() {
           std::vector<double> next_y_vals;
 
           // TESTING: show the raw WPTS, without curve fitting
-          next_x_vals.assign(wptx_body.data(), wptx_body.data()+wptx_body.size());
-          next_y_vals.assign(wpty_body.data(), wpty_body.data()+wpty_body.size());
+//          next_x_vals.assign(wptx_body.data(), wptx_body.data()+wptx_body.size());
+//          next_y_vals.assign(wpty_body.data(), wpty_body.data()+wpty_body.size());
 
           // generate curve fitted Ref Traj
-//          double dx = 5; // segment lenth [m]
-//          for (int i=0; i<10; i++) { // projecting 10 segments forward
-//            next_x_vals.push_back(dx*i);
-//            next_y_vals.push_back(polyeval(coeffs, dx*i));
-//          }
+          double dx = 5; // segment length [m]
+          int num_seg = 15;
+          for (int i=0; i<num_seg; i++) {
+            next_x_vals.push_back(dx*i);
+            next_y_vals.push_back(polyeval(coeffs, dx*i));
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

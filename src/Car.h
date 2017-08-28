@@ -15,11 +15,6 @@
 class Car {
  public:
 
-//  struct Coord {
-//    double x;
-//    double y;
-//  };
-
   Car();
   virtual ~Car();
 
@@ -45,10 +40,8 @@ class Car {
   void set_psi(double psi_in)                   {this->myPsi = psi_in;}
   void set_v(double v_in)                       {this->myV = v_in;}
   void setCoeffs(const Eigen::VectorXd& coeffs) {this->coeffs = coeffs;}
-  void set_steerFb(double mySteerFb) { this->mySteerFb = mySteerFb; }
-  void set_accelFb(double myAccelFb) { this->myAccelFb = myAccelFb; }
-  void set_dt(double dt_in) { this->myMpc.set_dt( dt_in ); }
-
+  void set_steerFb(double mySteerFb)            { this->mySteerFb = mySteerFb; }
+  void set_accelFb(double myAccelFb)            { this->myAccelFb = myAccelFb; }
 
  private:
 
@@ -59,8 +52,8 @@ class Car {
   double myY;             // [m], (+) north
   double myPsi;           // [rad], map axis, (+) CCW from east
   double myV;             // [m/s], (+) forward
-  double myCte;           // [m], (+) car is LEFT of Ref Traj
-  double myPsiErr;        // [rad], (+) car pointing LEFT of Ref heading
+  double myCte;           // [m], (+) car is RIGHT of Ref Traj
+  double myPsiErr;        // [rad], (+) Ref heading is RIGHT of nose
 
   double mySteerFb;      // feedback [rad], (+) right turn
   double myAccelFb;      // feedback [ND], (+) fwd, normalized range (+/-1)
@@ -68,8 +61,8 @@ class Car {
   double mySteerCmd;      // [rad], (+) right turn
   double myAccelCmd;      // [ND], (+) fwd, normalized range (+/-1)
 
-  Eigen::VectorXd coeffs; // Ref trajectory polyfitted coeffs, in body axis
-  Eigen::VectorXd coeffs_der; // coeff of Ref Traj's 1st derivative (ie: slope)
+  Eigen::VectorXd coeffs; // Ref trajectory polyfitted coeffs, in body axis (x-fwd, y-left)
+  Eigen::VectorXd coeffs_der; // coeff of Ref Traj's 1st derivative (ie: slope -> heading)
 };
 
 #endif /* CAR_H_ */

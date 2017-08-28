@@ -11,12 +11,13 @@
 #include "UtilFunctions.h"
 
 Car::Car() {
-  myMpc.init(); // don't forget this again!
+  myMpc.init(); // don't forget this again, like last time!
 }
 
 Car::~Car() {
 }
 
+// Transform coord from map to body axis
 void Car::map2body(double& x_map, double& y_map,
                    double& x_b, double& y_b) {
   double dxm = x_map - myX;
@@ -34,7 +35,7 @@ void Car::update() {
            0.0,     // psi, [rad]
            myV,     // speed, [m/s]
            myCte,   // [m], + to right of RefTraj
-           myPsiErr;// psi_err, [rad] + to left of ref Psi
+           myPsiErr;// psi_err, [rad] Ref heading is right of nose
   myMpc.set_state(state);
 
   myMpc.set_coeff(coeffs); // Ref Trajectory
@@ -57,7 +58,7 @@ void Car::calc_nav_errs() {
 
   // calculate the cross track error
 //  myCte = polyeval(coeffs, 0.0);
-  myCte = coeffs[0];
+  myCte = coeffs[0];  // since x=0, simplifies to this
 
   // calculate the orientation error
   //coeffs_der = polyder(coeffs); // 1st derivative coeff
@@ -66,6 +67,7 @@ void Car::calc_nav_errs() {
   myPsiErr = -atan(coeffs[1]); // psi of ownship in body axis == 0
 }
 
+// for display
 void Car::get_predTraj(std::vector<double>& xs_out, std::vector<double>& ys_out) {
   xs_out = myMpc.get_PredTrajX();
   ys_out = myMpc.get_PredTrajY();

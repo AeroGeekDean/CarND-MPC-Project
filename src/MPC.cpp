@@ -9,7 +9,7 @@ using CppAD::AD;
 // MPC class definition implementation.
 //
 MPC::MPC() {
-  // set some default value, to safe guard against forgetting to call init() later...
+  // set some default value, to safe guard against forgetting to call init()...
   look_ahead_time = 5.0; // [sec]
   fg.dt_model = 0.1; // 10 Hz [sec]
   fg.N = (size_t) (look_ahead_time/fg.dt_model);
@@ -19,11 +19,11 @@ MPC::~MPC() {}
 
 void MPC::init() {
 
-  look_ahead_time = 1.0; // [sec]
+  look_ahead_time = 1.5; // [sec]
   fg.dt_model = 0.1; // 10 Hz [sec]
   fg.N = (size_t) (look_ahead_time/fg.dt_model);
 
-  fg.vref = 50*mph2mps(); // <----   set reference speed, [mph]
+  fg.vref = 60*mph2mps(); //                <----   set reference speed, [mph]
 
   // The solver takes all the state variables and actuator
   // variables in a singular vector. Thus, we need to establish
@@ -47,11 +47,6 @@ void MPC::Solve() {
   size_t num_states = 6;
   size_t num_controls = 2;
 
-/*
-  // project vehicle state forward by some time, to simulate system time delay
-  double dt = 0.1;
-  Eigen::VectorXd x1 = propagate_model(x0, u0, dt);
-*/
   // assign x0 & u0 to local for code clarity
   double x     = x0[0];
   double y     = x0[1];
@@ -69,22 +64,22 @@ void MPC::Solve() {
   // Set the number of constraints
   size_t n_constraints = num_states * fg.N;
 
-//  std::cout << "n_vars = " << n_vars << " n_constraints = " << n_constraints << std::endl;
-
   // Initial value of the independent variables.
   // SHOULD BE 0 besides initial state.
   Dvector vars(n_vars);
-  for (int i = 0; i < n_vars; i++) { vars[i] = 0; }
-  // Set the init condition variable values
-  vars[fg.x_start]     = x;
-  vars[fg.y_start]     = y;
-  vars[fg.psi_start]   = psi;
-  vars[fg.v_start]     = v;
-  vars[fg.cte_start]   = cte;
-  vars[fg.epsi_start]  = epsi;
+  for (int i = 0; i < n_vars; i++)
+    vars[i] = 0;
 
-  vars[fg.delta_start] = delta;  // <---- I added init condition of controls as well.
-  vars[fg.a_start]     = accel;  //       These were missing in classroom!!!
+  // Set the init condition variable values
+  vars[fg.x_start]    = x;
+  vars[fg.y_start]    = y;
+  vars[fg.psi_start]  = psi;
+  vars[fg.v_start]    = v;
+  vars[fg.cte_start]  = cte;
+  vars[fg.epsi_start] = epsi;
+
+  fg.delta0           = delta;  // <---- Added previous frame's controls as well. So able to penalize for large deviation.
+  fg.accel0           = accel;  //       These were missing in classroom!!!
 
   // Lower and upper limits for x
   Dvector vars_lowerbound(n_vars);
@@ -100,13 +95,9 @@ void MPC::Solve() {
   // The upper and lower limits of remaining delta (steering) are
   // (-25, 25) [deg] (apply values in [rad]).
   for (int i = fg.delta_start; i < fg.a_start; i++) {
-    vars_lowerbound[i] = deg2rad(-20)*fg.Lf;
-    vars_upperbound[i] = deg2rad(20)*fg.Lf;
+    vars_lowerbound[i] = deg2rad(-25)*fg.Lf;
+    vars_upperbound[i] = deg2rad(25)*fg.Lf;
   }
-
-  // limit the init delta (steering) value to the IC value
-// vars_lowerbound[fg.delta_start] = delta*fg.Lf;  // <--- used bounds to constraint steering init cond
-// vars_upperbound[fg.delta_start] = delta*fg.Lf;
 
   // Upper and lower limits of remaining acceleration
   // [-1,1] normalized, [m/s^2]
@@ -114,10 +105,6 @@ void MPC::Solve() {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
-
-  // limit the init accel (throttle) value to the IC value
-//   vars_lowerbound[fg.a_start] = accel;  // <---- used bounds to constraint throttle init cond
-//   vars_upperbound[fg.a_start] = accel;
 
   // Lower and upper limits for the constraints
   // Should be 0 besides initial state.
@@ -174,11 +161,11 @@ void MPC::Solve() {
   // Cost
   auto cost = solution.obj_value;
 
-  // <--- would be nice if simulator dashboard could show status of MPC... --->
+  // <--- would be nice if status of MPC could be shown on simulator dash board... --->
 
   pred_traj_x.clear();
   pred_traj_y.clear();
-//  pred_psi.clear();
+//  pred_psi.clear(); // debug/testing use
 //  pred_v.clear();
 //  pred_cte.clear();
 //  pred_epsi.clear();
@@ -222,6 +209,5 @@ void MPC::Solve() {
 //            << ", Steer " << output[0]
 //            << ", Accel " << output[1]
 //            << std::endl;
-
   return;
 }
