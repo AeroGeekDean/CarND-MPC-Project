@@ -23,7 +23,7 @@ void MPC::init() {
   fg.dt_model = 0.1; // 10 Hz [sec]
   fg.N = (size_t) (look_ahead_time/fg.dt_model);
 
-  fg.vref = 60*mph2mps(); //                <----   set reference speed, [mph]
+  fg.vref = 55*mph2mps(); //                <----   set reference speed, [mph]
 
   // The solver takes all the state variables and actuator
   // variables in a singular vector. Thus, we need to establish

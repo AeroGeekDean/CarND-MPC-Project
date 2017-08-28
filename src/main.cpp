@@ -103,11 +103,14 @@ int main() {
 
           v *= mph2mps(); // convert speed from [mph] to [m/s] right away
 
-          // Propagate the states forward by the actual MEASURED frame time, dt.
+          // --- Deadreckon ahead, to compensate for latencies ---
+
+          // Propagate the states forward by the actual MEASURED frame time, dt, PLUS additional 5%
           //
           // ASSUMPTION: dt of previous frame is good predictor of current frame dt.
-          // Any artificially imposed latency will be automatically captured by dt.
-          std::vector<double> x1 = propagate_state_map_coord({px, py, psi, v, -steer_fb/Lf, throttle_fb}, dt*1.1);
+          // Any artificially imposed latency (ie: sleep() ) will automatically be captured by dt measurement.
+          std::vector<double> x1 = propagate_state_map_coord({px, py, psi, v, -steer_fb/Lf, throttle_fb},
+                                                             dt*1.05); // <--- actual dt + 5% more
 
           // update states with propagated values
           px = x1[0];
