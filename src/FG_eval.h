@@ -94,7 +94,7 @@ class FG_eval {
       fg[0] += CppAD::pow(accel_rate, 2) *0.05; // reduce to previous nominal gain order of magnitude
     }
 
-    // Also penalize deviation from previous frame's control inputs.
+    // Also penalize deviation from previous frame's control inputs.  <--- new
     fg[0] += CppAD::pow( (vars[delta_start] - delta0)/dt_model, 2) *0.1;
     fg[0] += CppAD::pow( (vars[a_start] - accel0)/dt_model, 2) *0.05;
 
